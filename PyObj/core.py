@@ -50,6 +50,7 @@ class Vert:
 		del self.pyObj.vertObj[self.i]
 		for key, face in self.faces.items():
 			face.delete()
+		self.i = -1
 	
 
 	
@@ -84,6 +85,7 @@ class Face:
 		for vert in self.verts:
 			if self.i in vert.faces:
 				del vert.faces[self.i]
+		self.i = -1
 		
 		
 # PyObj class
@@ -109,7 +111,7 @@ class run:
 	
 	
 	# This creates a new vertex, and returns the result
-	def newVert(self, x, y, z, i):
+	def newVert(self, x, y, z, i=0):
 		v = Vert(self, x, y, z, i)
 		self.vertObj[v.i] = v
 		return v
@@ -198,10 +200,88 @@ class run:
 					sliceFaces.append(face)
 				
 		print("%s faces found bisecting the slice plane." % len(sliceFaces))
-			
+		
+		# Perform the slice by deleting all verts and faces below the plane
 		for i, vert in enumerate(self.verts()):
 			if vert.y < height:
 				vert.delete()
+				
+		# Re-build faces along the slice line to make the model clean, using the list of bisecting slice faces
+		for face in sliceFaces:
+			
+			# For a slice function like this, we need to deal with triangles only. At the moment that involves triangulation
+			# TODO: Implement triangulation
+			if len(face.verts) > 3:
+				raise Exception("Slice function cannot currently deal with Ngons")
+				
+			
+			# Deal with this triangle as a list of lines in order (to preserve normals)
+			lines = []
+			for i, vert in enumerate(face.verts):
+				if i != (len(face.verts) - 1):
+					lines.append([vert, face.verts[i+1]])
+				else:
+					lines.append([vert, face.verts[0]])
+					
+			
+						
+			# Shorten the lines to the slice plane
+			for i, line in enumerate(lines):
+				
+				# One of the lines will either be entirely above or below the slice plane
+				# If it's entirely above or below, ignore it.
+				if line[0].i != -1 and line[1].i != -1:
+					pass
+				
+				# If it's entirely below, we can delete it.
+				elif line[0].i == -1 and line[1].i == -1:
+					lines[i] = []
+				
+				# If it's neither, it's a crossing line and we need to process it.
+				else:
+					for i, vert in enumerate(line):
+						
+						# If this vert is not deleted (and is therefore above the slice plane), keep and ignore.
+						if vert.i != -1:
+							pass
+						
+						# If the vert has been deleted, it's in the deletion area and we need to create a new vertex at the correct coordinates
+						else:
+							if i == 0:
+								otherVert = line[1]
+							if i == 1:
+								otherVert = line[0]
+								
+							# The offset is the transformation needed to start at otherVert and arrive at this vertex
+							offset = [(vert.x - otherVert.x), (vert.y - otherVert.y), (vert.z - otherVert.z)]
+							
+							# The targetOffset is the amount of offset needed to start at otherVert and arrive at the slice plane
+							targetOffset = height - otherVert.y
+							
+							# The scale is the scale factor to get from the current offset to the target offset
+							scale = targetOffset/offset[1]
+							
+							# The new offset is the transformation needed to start at otherVert and arrive at our destination location on the slice plane
+							newOffset = [(offset[0] * scale), (offset[1] * scale), (offset[2] * scale)]
+							
+							# We can now create our new vertex
+							newVert = self.newVert((otherVert.x + newOffset[0]), (otherVert.y + newOffset[1]), (otherVert.z + newOffset[2]))
+							
+							# And replace the current deleted vertex with the new one
+							del line[i]
+							line.insert(i, newVert)
+							
+			# We've now finished processing our lines and can use them to re-build a new polygon.
+			newVerts = []
+			for line in lines:
+				# If we've deleted this line, just continue on.
+				if len(line) == 0:
+					pass
+				else:
+					if line[0] not in newVerts:
+						newVerts.append(line[0])
+					newVerts.append(line[1])
+			self.newFace(newVerts)
 				
 		print("Slice complete")
 		
