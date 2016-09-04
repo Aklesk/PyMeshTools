@@ -1,4 +1,4 @@
-import pdb
+from math import fabs
 
 # We'll be using this to simplify lookups by giving everything an ID
 def idGen():
@@ -51,9 +51,29 @@ class Vert:
 		
 	def getFaces(self):
 		return [v for k, v in self.faceObj.items()]
-		
+	
+	# Note that these lines will not be directional as they are not tied to a face
 	def getLines(self):
-		return
+		lines = []
+		for face in self.getFaces():
+			lines.extend(face.getLines())
+			
+		# Filter unrelated lines, keeping only lines to and from this vert
+		lines = [l for l in lines if l[0] == self or l[1] == self]
+		
+		# Filter out duplicate lines
+		filteredLines = []
+		for line in lines:
+			if (len(
+			[l for l in filteredLines if l[0] == line[0] and l[1] == line[1]]
+			) == 0
+			and
+			len(
+			[l for l in filteredLines if l[1] == line[0] and l[0] == line[1]]
+			) == 0):
+				filteredLines.append(line)
+		
+		return filteredLines		
 		
 	# TODO: Add check not delete any faces which still have three good vertices
 	def delete(self):
@@ -65,7 +85,6 @@ class Vert:
 
 	
 # Face class
-# Note that 
 class Face:
 	def __eq__(self, other):
 		return self.i == other.i
@@ -89,6 +108,16 @@ class Face:
 		for vert in self.verts:
 			vert.faceObj[self.i] = self
 			
+	# Note that these lines will be directional based on normals
+	def getLines(self):
+		lines = []
+		for i, vert in enumerate(self.getVerts()):
+			if i != (len(self.getVerts()) - 1):
+				lines.append([vert, self.getVerts()[i+1]])
+			else:
+				lines.append([vert, self.getVerts()[0]])
+		return lines
+	
 	def getVerts(self):
 		return self.verts
 		
@@ -199,7 +228,7 @@ class run:
 		
 		
 		# Create a list of faces that bisect the slice plane
-		sliceFaces = []
+		sliceFaces = {}
 		for i, face in enumerate(self.getFaces()):
 			sides = {"below": 0, "above": 0}
 			
@@ -210,7 +239,7 @@ class run:
 					sides["above"] = 1
 					
 				if sides["below"] == 1 and sides["above"] == 1:
-					sliceFaces.append(face)
+					sliceFaces[face.i] = face
 		
 		# Perform the slice by deleting all verts and faces below the plane
 		for i, vert in enumerate(self.getVerts()):
@@ -221,28 +250,20 @@ class run:
 		allNewVerts = []
 				
 		# Re-build faces along the slice line to make the model clean, using the list of bisecting slice faces
-		for face in sliceFaces:
+		for key, face in sliceFaces.items():
 			
 			# For a slice function like this, we need to deal with triangles only. At the moment that involves triangulation
 			# TODO: Implement triangulation
 			if len(face.getVerts()) > 3:
-				raise Exception("Slice function cannot currently deal with Ngons")
-				
-			
-			# Deal with this triangle as a list of lines in order (to preserve normals)
-			lines = []
-			for i, vert in enumerate(face.getVerts()):
-				if i != (len(face.getVerts()) - 1):
-					lines.append([vert, face.getVerts()[i+1]])
-				else:
-					lines.append([vert, face.getVerts()[0]])
-					
+				raise Exception("Slice function cannot currently deal with Ngons")	
+
+			lines = face.getLines()
 						
 			# Shorten the lines to the slice plane
 			for i, line in enumerate(lines):
 				
 				# One of the lines will either be entirely above or below the slice plane
-				# If it's entirely above or below, ignore it.
+				# If it's entirely above, ignore it.
 				if line[0].i != -1 and line[1].i != -1:
 					pass
 				
@@ -263,14 +284,28 @@ class run:
 							# The scale is the transform to change the current offset to the new offset that will end up on the slice plane
 							scale = (height - otherVert.y)/(vert.y - otherVert.y)
 							
-							# Create our new vertex
-							newVert = self.newVert(
-								(otherVert.x + ((vert.x - otherVert.x) * scale)),
+							# now we can calculate our new XYZ
+							xyz = ((otherVert.x + ((vert.x - otherVert.x) * scale)),
 								(otherVert.y + ((vert.y - otherVert.y) * scale)),
-								(otherVert.z + ((vert.z - otherVert.z) * scale))
-							)
+								(otherVert.z + ((vert.z - otherVert.z) * scale)))
 							
-							# And replace the current deleted vertex with the new one
+							# Now that we know where the vertex should go, we neet to check - is there already
+							# another one there from another face?
+							t = 0.00001
+							matches = [v for v in allNewVerts if fabs(v.x - xyz[0]) < t and fabs(v.y - xyz[1]) < t and fabs(v.z - xyz[2]) < t ]
+							if len(matches) > 0:
+								newVert = matches[0]
+							else:
+							
+								# If we need a new one, create our new vertex and add it to the newVerts list.
+								newVert = self.newVert(
+									(otherVert.x + ((vert.x - otherVert.x) * scale)),
+									(otherVert.y + ((vert.y - otherVert.y) * scale)),
+									(otherVert.z + ((vert.z - otherVert.z) * scale))
+								)
+								allNewVerts.append(newVert)
+							
+							# We've sorted out the vertex, so now replace the current deleted vertex with the new one
 							del line[i]
 							line.insert(i, newVert)
 							
@@ -278,13 +313,11 @@ class run:
 			
 			newVerts = []
 			for line in lines:
-				# Only process if we haven't deleted the line.
-				if len(line) != 0:
+				if len(line) != 0: # Only process if we haven't deleted the line.
 					if line[0] not in newVerts:
 						newVerts.append(line[0])
-						allNewVerts.append(line[0])
-					newVerts.append(line[1])
-					allNewVerts.append(line[1])
-			self.newFace(newVerts)
+					if line[1] not in newVerts:
+						newVerts.append(line[1])
+			self.newFace(newVerts)			
 				
 		print("Slice finished")
