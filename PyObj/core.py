@@ -73,7 +73,33 @@ class Vert:
 			) == 0):
 				filteredLines.append(line)
 		
-		return filteredLines		
+		return filteredLines
+	
+	# This checks to see if this vert is on a border by seeing if there are any border edges near.
+	def isBorder(self):
+		# The only way to determine a border line is one that is touching only one face.
+		# We can check this simply by listing all lines on adjacent faces. The border edges
+		# are the ones that involve this vert, but show up only once.
+		faceLines = []
+		for face in self.getFaces():
+			faceLines.extend(face.getLines())
+			
+		# First filter out any lines that don't involve this vertex
+		faceLines = [l for l in faceLines if l[0] == self or l[1] == self]
+		
+		# Now filter out any lines that appear twice
+		borderLines = []
+		for line in faceLines:
+			matches = []
+			matches.extend([l for l in faceLines if l[0] == line[0] and l[1] == line[1]])
+			matches.extend([l for l in faceLines if l[1] == line[0] and l[1] == line[0]])
+			if len(matches) == 1:
+				borderLines.append(line)
+		
+		if len(borderLines) > 0:
+			return True
+		else:
+			return False
 		
 	# TODO: Add check not delete any faces which still have three good vertices
 	def delete(self):
@@ -320,4 +346,38 @@ class run:
 						newVerts.append(line[1])
 			self.newFace(newVerts)			
 				
-		print("Slice finished")
+		print("Slice finished - filling holes")
+
+		# First we need to split the verts out into contiguous borders
+		borders = []
+		def borderWalk(lastVert, vert, startVert=0):
+			if type(startVert) == int:
+				found = [lastVert, vert]
+				startVert = lastVert
+			else:
+				found = [vert]
+			
+			adjacent = {}
+			for line in vert.getLines():
+				for v in line:
+					adjacent[v.i] = v
+					
+			nextVert = [v for k, v in adjacent.items() if v.isBorder() and v != lastVert and v != vert][0]
+
+			if nextVert != startVert:
+				found.extend(borderWalk(vert, nextVert, startVert))
+				
+			return found
+		
+		while len(allNewVerts) > 0:
+		
+			# First we need to determine direction for normals. Pick a starting place and go						
+			end = 0
+			for line in allNewVerts[0].getLines():
+				if end == 0:
+					if line[0] in allNewVerts and line[1] in allNewVerts:
+						end = 1
+						result = borderWalk(line[1], line[0])
+						borders.append(result)
+						allNewVerts = [v for v in allNewVerts if v not in result]
+						self.newFace(result)
