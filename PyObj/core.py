@@ -88,11 +88,14 @@ class Face:
 		# Make sure we're associated with the verts.
 		for vert in self.verts:
 			vert.faceObj[self.i] = self
+			
+	def getVerts(self):
+		return self.verts
 		
 	# TODO: Add check to make sure no vertices are orphaned
 	def delete(self):
 		del self.pyObj.faceObj[self.i]
-		for vert in self.verts:
+		for vert in self.getVerts():
 			if self.i in vert.faceObj:
 				del vert.faceObj[self.i]
 		self.i = -1
@@ -184,7 +187,7 @@ class run:
 			
 		# Write each face, using the index of the vertex object.
 		for face in self.getFaces():
-			file.write("f %s\n" % " ".join([v.i for v in face.verts]))
+			file.write("f %s\n" % " ".join([v.i for v in face.getVerts()]))
 			
 		file.close()
 		print("File export complete.")
@@ -200,7 +203,7 @@ class run:
 		for i, face in enumerate(self.getFaces()):
 			sides = {"below": 0, "above": 0}
 			
-			for vert in face.verts:
+			for vert in face.getVerts():
 				if vert.y < height:
 					sides["below"] = 1
 				elif vert.y >= height:
@@ -222,17 +225,17 @@ class run:
 			
 			# For a slice function like this, we need to deal with triangles only. At the moment that involves triangulation
 			# TODO: Implement triangulation
-			if len(face.verts) > 3:
+			if len(face.getVerts()) > 3:
 				raise Exception("Slice function cannot currently deal with Ngons")
 				
 			
 			# Deal with this triangle as a list of lines in order (to preserve normals)
 			lines = []
-			for i, vert in enumerate(face.verts):
-				if i != (len(face.verts) - 1):
-					lines.append([vert, face.verts[i+1]])
+			for i, vert in enumerate(face.getVerts()):
+				if i != (len(face.getVerts()) - 1):
+					lines.append([vert, face.getVerts()[i+1]])
 				else:
-					lines.append([vert, face.verts[0]])
+					lines.append([vert, face.getVerts()[0]])
 					
 						
 			# Shorten the lines to the slice plane
@@ -285,5 +288,3 @@ class run:
 			self.newFace(newVerts)
 				
 		print("Slice finished")
-		
-		
