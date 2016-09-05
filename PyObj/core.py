@@ -37,7 +37,6 @@ class Vert:
 			i = pyObj.getID()
 			
 		# Load faces into an object for easy lookup (order does not matter here)
-		# NOTE: DO NOT USE SELF.FACES. IT WILL BE UNDEFINED. USE GETFACES INSTEAD.
 		self.faceObj = {}
 		if not faces == 0:
 			for face in faces:
@@ -103,10 +102,12 @@ class Vert:
 		
 	# TODO: Add check not delete any faces which still have three good vertices
 	def delete(self):
-		del self.pyObj.vertObj[self.i]
-		for face in self.getFaces():
-			face.delete()
-		self.i = -1
+		if self.i != -1: # Don't delete self more than once
+			i = self.i
+			self.i = -1
+			del self.pyObj.vertObj[i]
+			for face in self.getFaces():
+				face.delete()
 	
 
 	
@@ -147,19 +148,31 @@ class Face:
 	def getVerts(self):
 		return self.verts
 		
-	# TODO: Add check to make sure no vertices are orphaned
 	def delete(self):
-		del self.pyObj.faceObj[self.i]
-		for vert in self.getVerts():
-			if self.i in vert.faceObj:
-				del vert.faceObj[self.i]
-		self.i = -1
+		if self.i != -1: # Don't delete self twice
+			i = self.i
+			self.i = -1
+			del self.pyObj.faceObj[i]
+			for vert in self.getVerts():
+				if i in vert.faceObj:
+					del vert.faceObj[i]
+				if len(vert.getFaces()) == 0: # check if vertex is orphan now
+					vert.delete()
+			
 		
+	def triangulate(self):
+		self.delete()
+		verts = self.getVerts()
+		newFaces = []
+		while len(verts) > 2:
+			newFaces.append(self.pyObj.newFace([verts[0], verts[1], verts[2]]))
+			del verts[1]
+		return newFaces
 		
 # PyObj class
 class run:
-	vertObj = {} # We want a dictionary here for fast lookups - don't want to be using find all the time.
-	faceObj = {} # We want a dictionary here for fast lookups - don't want to be using find all the time.
+	vertObj = {} # Dictionary here for fast lookups
+	faceObj = {} # Dictionary here for fast lookups
 	idGen = idGen()
 	
 	
@@ -218,7 +231,7 @@ class run:
 		print("Processed %s vertices." % len(self.getVerts()))
 		
 		for i, f in enumerate(faceLines):
-			self.newFace([self.vertObj[int(v)] for v in f.split(" ")])
+			self.newFace([self.vertObj[int(v.split("/")[0])] for v in f.split(" ")])
 		print("Processed %s faces." % len(self.getFaces()))
 		
 		
@@ -266,6 +279,13 @@ class run:
 					
 				if sides["below"] == 1 and sides["above"] == 1:
 					sliceFaces[face.i] = face
+					
+		# The slice function can only deal with triangles, so triangulate all sliceFaces
+		ngons = [f for key, f in sliceFaces.items() if len(f.getVerts()) > 3]
+		for face in ngons:
+			del sliceFaces[face.i]
+			for f in face.triangulate():
+				sliceFaces[f.i] = f
 		
 		# Perform the slice by deleting all verts and faces below the plane
 		for i, vert in enumerate(self.getVerts()):
@@ -277,12 +297,6 @@ class run:
 				
 		# Re-build faces along the slice line to make the model clean, using the list of bisecting slice faces
 		for key, face in sliceFaces.items():
-			
-			# For a slice function like this, we need to deal with triangles only. At the moment that involves triangulation
-			# TODO: Implement triangulation
-			if len(face.getVerts()) > 3:
-				raise Exception("Slice function cannot currently deal with Ngons")	
-
 			lines = face.getLines()
 						
 			# Shorten the lines to the slice plane
