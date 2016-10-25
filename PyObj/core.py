@@ -2,6 +2,7 @@ from math import fabs
 
 # We'll be using this to simplify lookups by giving everything an ID
 def idGen():
+	"""Generator for an ID locally unique to this session."""
 	num = 0
 	while True:
 		yield "aA3mZ4%s" % str(num)
@@ -9,11 +10,11 @@ def idGen():
 
 # Vert class
 class Vert:
+	"""Store attributes and functions for working with a single vertex and related geometry."""
 	def __eq__(self, other):
 		return self.i == other.i
 		
-	def __init__(self, pyObj, x, y, z, i=0, faces=0):
-	
+	def __init__(self, pyObj, x, y, z, i=0, faces=0):	
 		# Validate the inputs
 		if not isinstance(pyObj, run):
 			raise Exception("New verts cannot be created directly - use newVert")
@@ -49,10 +50,12 @@ class Vert:
 		self.pyObj = pyObj
 		
 	def getFaces(self):
+		"""Return a list of face classes that include this vertex."""
 		return [v for k, v in self.faceObj.items()]
 	
 	# Note that these lines will not be directional as they are not tied to a face
 	def getLines(self):
+		"""Return a list of line classes that terminate at this vertex."""
 		lines = []
 		for face in self.getFaces():
 			lines.extend(face.getLines())
@@ -76,6 +79,7 @@ class Vert:
 	
 	# This checks to see if this vert is on a border by seeing if there are any border edges near.
 	def isBorder(self):
+		"""If this vertex part of a non-manifold geometry border return True, otherwise return False."""
 		# The only way to determine a border line is one that is touching only one face.
 		# We can check this simply by listing all lines on adjacent faces. The border edges
 		# are the ones that involve this vert, but show up only once.
@@ -102,6 +106,7 @@ class Vert:
 		
 	# TODO: Add check not delete any faces which still have three good vertices
 	def delete(self):
+		"""Delete this vertex and all faces that included it."""
 		if self.i != -1: # Don't delete self more than once
 			i = self.i
 			self.i = -1
@@ -117,7 +122,6 @@ class Face:
 		return self.i == other.i
 		
 	def __init__(self, pyObj, verts):
-	
 		# Validate the inputs
 		if not isinstance(pyObj, run):
 			raise Exception("New faces cannot be created directly - use newFace")
@@ -137,6 +141,7 @@ class Face:
 			
 	# Note that these lines will be directional based on normals
 	def getLines(self):
+		"""Return list of lines in the form [startVertex, endVertex], so as to preserve direction."""
 		lines = []
 		for i, vert in enumerate(self.getVerts()):
 			if i != (len(self.getVerts()) - 1):
@@ -146,21 +151,24 @@ class Face:
 		return lines
 	
 	def getVerts(self):
+		"""Return all vertices that make up this face."""
 		return self.verts
 		
 	def delete(self):
+		"""Delete this face and any resulting orphan vertices."""
 		if self.i != -1: # Don't delete self twice
 			i = self.i
 			self.i = -1
 			del self.pyObj.faceObj[i]
 			for vert in self.getVerts():
-				if i in vert.faceObj:
+				if i in vert.faceObj: # Clean this out of any vertex association lists
 					del vert.faceObj[i]
 				if len(vert.getFaces()) == 0: # check if vertex is orphan now
 					vert.delete()
 			
 		
 	def triangulate(self):
+		"""Triangulate this face and return the resulting new faces."""
 		self.delete()
 		verts = self.getVerts()
 		newFaces = []
@@ -171,6 +179,7 @@ class Face:
 		
 # PyObj class
 class run:
+	"""Initialization class to set up the environment for PyMeshTools to function."""
 	vertObj = {} # Dictionary here for fast lookups
 	faceObj = {} # Dictionary here for fast lookups
 	idGen = idGen()
@@ -178,21 +187,25 @@ class run:
 	
 	# This returns unique (for the session, not globally) IDs using the idGen generator
 	def getID(self):
+		"""Return a locally unique ID for this session."""
 		return self.idGen.next()
 		
 		
 	# This returns an unordered list of verts
 	def getVerts(self):
+		"""Return an unordered list of all current verts."""
 		return [val for key, val in self.vertObj.items()]
 		
 		
 	# This returns an unordered list of faces
 	def getFaces(self):
+		"""Return unordered list of all current faces."""
 		return [val for key, val in self.faceObj.items()]
 	
 	
 	# This creates a new vertex, and returns the result
 	def newVert(self, x, y, z, i=0):
+		"""Create a new vertex with the provided x, y, a, and index provided, and return the created Vertex instance."""
 		v = Vert(self, x, y, z, i)
 		self.vertObj[v.i] = v
 		return v
@@ -200,6 +213,7 @@ class run:
 		
 	# This creates a new face, and returns the result
 	def newFace(self, verts):
+		"""Create a new face from the provided list of vertices and return the created Face instance."""
 		f = Face(self, verts)
 		self.faceObj[f.i] = f
 		return f
@@ -207,6 +221,7 @@ class run:
 	
 	# This imports an OBJ file into PyObj for processing
 	def importFile(self, path):
+		"""Import single OBJ file at given path into PyMeshTools for processing."""
 		print("Importing file %s" % (path))
 		file = open(path, 'r')
 		
@@ -242,6 +257,7 @@ class run:
 		
 	# This exports whatever the currently loaded OBJ looks like
 	def exportFile(self, path):
+		"""Exports an OBJ based on the data loaded into PyMeshTools."""
 		print("Exporting file %s" % (path))
 
 		file = open(path, 'w')
@@ -263,6 +279,7 @@ class run:
 		
 	# This slices the model in the Y axis at the specified height, and keeps everything above it
 	def sliceY(self, height):
+		"""Slice the data in PyMeshTools at the specified height in the Y axis, delete anything below, and fill the hole."""
 		print("Slicing model in Y axis at height %s" % str(height))
 		
 		
